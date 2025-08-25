@@ -1,0 +1,489 @@
+#!/bin/bash
+
+# CLI LLM Management System - Build & Runtime Script
+# This script provides comprehensive Maven build options and application management
+# Usage: run_clms [options]
+# Use -h or --help for complete option list
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Script directory and configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# Load environment configuration if available
+ENV_FILE="$SCRIPT_DIR/.clms_env"
+if [[ -f "$ENV_FILE" ]]; then
+    source "$ENV_FILE"
+else
+    echo -e "${YELLOW}⚠️  Environment not configured. Running setup...${NC}"
+    if [[ -x "$SCRIPT_DIR/setup_env.sh" ]]; then
+        "$SCRIPT_DIR/setup_env.sh"
+        source "$ENV_FILE"
+    else
+        echo -e "${RED}❌ setup_env.sh not found or not executable${NC}"
+        echo -e "${YELLOW}💡 Run: chmod +x setup_env.sh && ./setup_env.sh${NC}"
+        exit 1
+    fi
+fi
+
+# Configuration
+APP_PORT=9999
+PID_FILE="$SCRIPT_DIR/.clms.pid"
+LOG_DIR="$SCRIPT_DIR/logs"
+mkdir -p "$LOG_DIR"
+
+# Help function
+show_help() {
+    echo -e "${BLUE}🚀 CLI LLM Management System - Build & Runtime Script${NC}"
+    echo "============================================================"
+    echo ""
+    echo -e "${GREEN}USAGE:${NC}"
+    echo "  ./run_clms [OPTION] [TEST_PATTERN]"
+    echo ""
+    echo -e "${GREEN}OPTIONS:${NC}"
+    echo -e "${YELLOW}  Application Control:${NC}"
+    echo "    (no args)         Start the application"
+    echo "    -s, --stop        Stop the application"
+    echo ""
+    echo -e "${YELLOW}  Build Commands:${NC}"
+    echo "    -c, --clean-install       Run mvn clean install"
+    echo "    -q, --skip-tests-clean    Run mvn clean install -DskipTests"
+    echo "    -i, --install             Run mvn install"
+    echo "    -t, --skip-tests-install  Run mvn install -DskipTests"
+    echo "    -j, --jacoco-report       Generate JaCoCo coverage reports"
+    echo "    -r, --jacoco-clean-install  Clean install with coverage reports"
+    echo ""
+    echo -e "${YELLOW}  Targeted Testing:${NC}"
+    echo "    Build commands (-c, -i, -j, -r) accept optional TEST_PATTERN"
+    echo "    to run specific tests instead of full suite."
+    echo ""
+    echo -e "${YELLOW}  Information:${NC}"
+    echo "    -h, --help               Show this help message"
+    echo ""
+    echo -e "${GREEN}EXAMPLES:${NC}"
+    echo "  ./run_clms                    # Start application"
+    echo "  ./run_clms -s                 # Stop application"
+    echo "  ./run_clms -c                 # Clean build (all tests)"
+    echo "  ./run_clms -q                 # Fast clean build"
+    echo "  ./run_clms -j                 # Generate coverage reports (all tests)"
+    echo ""
+    echo -e "${GREEN}TARGETED TEST EXAMPLES:${NC}"
+    echo "  ./run_clms -j \"VectorSearchIT\"      # Run only VectorSearchIT with JaCoCo"
+    echo "  ./run_clms -c \"*IT\"                 # Run all IT tests with clean install"
+    echo "  ./run_clms -i \"FlywayMigrationIT\"   # Run specific test with install"
+    echo "  ./run_clms -r \"*Vector*\"            # Run tests matching pattern with coverage"
+    echo ""
+    echo -e "${GREEN}ENVIRONMENT:${NC}"
+    echo "  Script auto-detects Docker vs local Java/Maven based on .clms_env configuration."
+    echo "  See setup_env.sh for environment configuration."
+    echo ""
+}
+
+# Maven command execution function
+run_maven_command() {
+    local cmd="$1"
+    local description="$2"
+    
+    echo -e "${BLUE}🔨 $description${NC}"
+    echo "================================================"
+    echo ""
+    
+    # Check if we need to load environment for Maven commands
+    if [[ -z "$MVN_CMD" ]]; then
+        # Load environment configuration if not already loaded
+        if [[ -f "$ENV_FILE" ]]; then
+            source "$ENV_FILE"
+        fi
+        
+        # Set up Maven and Java environment based on configuration
+        if [[ "$CLMS_USE_DOCKER" == "true" ]]; then
+            echo -e "${YELLOW}📦 Using Docker container for Maven${NC}"
+            # Function to run commands in Docker
+            run_in_docker() {
+                docker compose -f "$SCRIPT_DIR/docker/tools/docker-compose.build.yml" run --rm build-env "$@"
+            }
+            MVN_CMD="run_in_docker mvn"
+        else
+            echo -e "${YELLOW}☕ Using local Maven installation${NC}"
+            
+            # Set up Java environment (CRITICAL: Maven needs correct JAVA_HOME)
+            if [[ -n "$CLMS_JAVA_HOME" ]]; then
+                export JAVA_HOME="$CLMS_JAVA_HOME"
+                export PATH="$JAVA_HOME/bin:$PATH"
+            fi
+            
+            # Set up Maven environment
+            if [[ -n "$CLMS_MAVEN_HOME" ]]; then
+                export MAVEN_HOME="$CLMS_MAVEN_HOME"
+                export M2_HOME="$CLMS_MAVEN_HOME"
+                export PATH="$MAVEN_HOME/bin:$PATH"
+                MVN_CMD="$MAVEN_HOME/bin/mvn"
+            else
+                MVN_CMD="mvn"
+            fi
+        fi
+    fi
+    
+    echo -e "${YELLOW}🔄 Running: $cmd${NC}"
+    echo ""
+    
+    # Execute the Maven command
+    if eval "$MVN_CMD $cmd"; then
+        echo ""
+        echo -e "${GREEN}✅ $description completed successfully${NC}"
+        if [[ "$cmd" == *"jacoco:report"* ]]; then
+            echo -e "${BLUE}📊 Coverage reports available at:${NC}"
+            echo "   HTML: target/site/jacoco/index.html"
+            echo "   XML:  target/site/jacoco/jacoco.xml"
+        fi
+    else
+        echo ""
+        echo -e "${RED}❌ $description failed${NC}"
+        exit 1
+    fi
+    echo ""
+}
+
+# Parse command line arguments
+BUILD_COMMAND=""
+BUILD_DESCRIPTION=""
+TEST_PATTERN=""
+
+# Capture optional test pattern parameter (second argument)
+if [[ -n "$2" ]]; then
+    TEST_PATTERN="$2"
+fi
+
+case "$1" in
+    "-h"|"--help")
+        show_help
+        exit 0
+        ;;
+    "-s"|"--stop")
+        STOP_MODE=true
+        ;;
+    "-c"|"--clean-install")
+        BUILD_COMMAND="clean install"
+        BUILD_DESCRIPTION="Maven Clean Install"
+        ;;
+    "-q"|"--skip-tests-clean")
+        BUILD_COMMAND="clean install -DskipTests"
+        BUILD_DESCRIPTION="Maven Clean Install (Skip Tests)"
+        ;;
+    "-i"|"--install")
+        BUILD_COMMAND="install"
+        BUILD_DESCRIPTION="Maven Install"
+        ;;
+    "-t"|"--skip-tests-install")
+        BUILD_COMMAND="install -DskipTests"
+        BUILD_DESCRIPTION="Maven Install (Skip Tests)"
+        ;;
+    "-j"|"--jacoco-report")
+        BUILD_COMMAND="clean test jacoco:report"
+        BUILD_DESCRIPTION="JaCoCo Coverage Report Generation"
+        ;;
+    "-r"|"--jacoco-clean-install")
+        BUILD_COMMAND="clean install jacoco:report"
+        BUILD_DESCRIPTION="Maven Clean Install with JaCoCo Coverage"
+        ;;
+    "")
+        STOP_MODE=false
+        ;;
+    *)
+        echo -e "${RED}❌ Unknown option: $1${NC}"
+        echo -e "${YELLOW}💡 Use -h or --help for usage information${NC}"
+        exit 1
+        ;;
+esac
+
+# Add test pattern to build command if provided (except for skip-tests commands)
+if [[ -n "$TEST_PATTERN" ]] && [[ -n "$BUILD_COMMAND" ]]; then
+    # Don't add test pattern to skip-tests commands
+    if [[ "$BUILD_COMMAND" != *"-DskipTests"* ]]; then
+        BUILD_COMMAND="$BUILD_COMMAND -Dtest=$TEST_PATTERN"
+        BUILD_DESCRIPTION="$BUILD_DESCRIPTION (targeted: $TEST_PATTERN)"
+        echo -e "${BLUE}🎯 Targeted test execution: $TEST_PATTERN${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Test pattern ignored for skip-tests command${NC}"
+    fi
+fi
+
+# If this is a build command, run it and exit
+if [[ -n "$BUILD_COMMAND" ]]; then
+    run_maven_command "$BUILD_COMMAND" "$BUILD_DESCRIPTION"
+    exit 0
+fi
+
+# Set STOP_MODE for backward compatibility
+if [[ -z "$STOP_MODE" ]]; then
+    STOP_MODE=false
+fi
+
+if [[ "$STOP_MODE" == "true" ]]; then
+    echo -e "${BLUE}🛑 CLI LLM Management System Stop Script${NC}"
+    echo "==============================================="
+    
+    # Check for Docker container first
+    if docker ps -q -f name=clms_runtime | grep -q .; then
+        echo -e "${YELLOW}🔄 Stopping Docker container clms_runtime...${NC}"
+        docker stop clms_runtime
+        echo -e "${GREEN}✅ Docker container stopped${NC}"
+    fi
+    
+    # Check if PID file exists
+    if [[ ! -f "$PID_FILE" ]]; then
+        echo -e "${YELLOW}⚠️  No PID file found. Application may not be running.${NC}"
+    else
+        PID=$(cat "$PID_FILE")
+        # Try to stop local process if it's a numeric PID
+        if [[ "$PID" =~ ^[0-9]+$ ]] && kill -0 "$PID" 2>/dev/null; then
+            echo -e "${YELLOW}🔄 Stopping application (PID: $PID)...${NC}"
+            kill "$PID"
+            # Wait for process to stop
+            for i in {1..10}; do
+                if ! kill -0 "$PID" 2>/dev/null; then
+                    break
+                fi
+                sleep 1
+            done
+            
+            if kill -0 "$PID" 2>/dev/null; then
+                echo -e "${RED}❌ Process still running, forcing kill...${NC}"
+                kill -9 "$PID"
+            fi
+            
+            echo -e "${GREEN}✅ Application stopped successfully${NC}"
+        else
+            echo -e "${YELLOW}⚠️  Process with PID $PID not found (may have already stopped)${NC}"
+        fi
+        rm -f "$PID_FILE"
+    fi
+    
+    # Also check for any processes using the app port
+    if lsof -ti:$APP_PORT >/dev/null 2>&1; then
+        echo -e "${YELLOW}🔄 Killing processes using port $APP_PORT...${NC}"
+        lsof -ti:$APP_PORT | xargs kill -9
+        echo -e "${GREEN}✅ Port $APP_PORT freed${NC}"
+    fi
+    
+    exit 0
+fi
+
+echo -e "${BLUE}🚀 CLI LLM Management System Startup Script${NC}"
+echo "================================================"
+echo -e "${BLUE}💡 To stop: ./run_clms -stop or ./run_clms --s${NC}"
+echo ""
+
+# Check for port conflicts and kill if necessary
+echo -e "${YELLOW}🔍 Checking port $APP_PORT availability...${NC}"
+if lsof -ti:$APP_PORT >/dev/null 2>&1; then
+    echo -e "${YELLOW}⚠️  Port $APP_PORT is busy, killing processes...${NC}"
+    lsof -ti:$APP_PORT | xargs kill -9
+    sleep 2
+    echo -e "${GREEN}✅ Port $APP_PORT freed${NC}"
+else
+    echo -e "${GREEN}✅ Port $APP_PORT available${NC}"
+fi
+
+# Check if database is running
+echo -e "${YELLOW}📊 Checking database connection...${NC}"
+if ! nc -z localhost ${PSQL_CLI_MANAGER_PORT:-9998} 2>/dev/null; then
+    echo -e "${RED}❌ Database not running on port ${PSQL_CLI_MANAGER_PORT:-9998}${NC}"
+    echo -e "${YELLOW}💡 Start the database first:${NC}"
+    echo "   docker compose -f docker/compose/docker-compose.yml up -d clms-postgres"
+    exit 1
+fi
+echo -e "${GREEN}✅ Database connection OK${NC}"
+
+# Determine how to run Java and Maven
+if [[ "$CLMS_USE_DOCKER" == "true" ]]; then
+    echo -e "${YELLOW}📦 Using Docker container for Java 21 and Maven${NC}"
+    
+    # Function to run commands in Docker
+    run_in_docker() {
+        docker compose -f "$SCRIPT_DIR/docker/tools/docker-compose.build.yml" run --rm build-env "$@"
+    }
+    
+    # Set commands for Docker mode
+    JAVA_CMD="run_in_docker java"
+    MVN_CMD="run_in_docker mvn"
+    BUILD_MODE="docker"
+    
+    # Ensure Docker container is available
+    if ! docker compose -f "$SCRIPT_DIR/docker/tools/docker-compose.build.yml" ps | grep -q clms_build_env; then
+        echo -e "${YELLOW}🔄 Starting Docker build environment...${NC}"
+        docker compose -f "$SCRIPT_DIR/docker/tools/docker-compose.build.yml" up -d
+    fi
+    
+    echo -e "${GREEN}✅ Docker environment ready${NC}"
+else
+    # Use local Java and Maven installations
+    echo -e "${YELLOW}☕ Using local Java and Maven installations...${NC}"
+    
+    # Set JAVA_HOME and MAVEN_HOME for this session
+    if [[ -n "$CLMS_JAVA_HOME" ]]; then
+        export JAVA_HOME="$CLMS_JAVA_HOME"
+        export PATH="$JAVA_HOME/bin:$PATH"
+        JAVA_CMD="$JAVA_HOME/bin/java"
+    else
+        JAVA_CMD="java"  # Fallback to system java
+    fi
+    
+    if [[ -n "$CLMS_MAVEN_HOME" ]]; then
+        export MAVEN_HOME="$CLMS_MAVEN_HOME"
+        export M2_HOME="$CLMS_MAVEN_HOME"
+        export PATH="$MAVEN_HOME/bin:$PATH"
+        MVN_CMD="$MAVEN_HOME/bin/mvn"
+    else
+        MVN_CMD="mvn"  # Fallback to system mvn
+    fi
+    
+    BUILD_MODE="local"
+    
+    # Verify Java version
+    JAVA_VERSION_OUTPUT=$($JAVA_CMD -version 2>&1 | grep -i "version" | head -n1)
+    if echo "$JAVA_VERSION_OUTPUT" | grep -q "\"2[1-9]\|\"[3-9][0-9]"; then
+        JAVA_VERSION=$(echo "$JAVA_VERSION_OUTPUT" | sed 's/.*"\([^"]*\)".*/\1/')
+        echo -e "${GREEN}✅ Found Java $JAVA_VERSION${NC}"
+    else
+        echo -e "${RED}❌ Java 21+ not available${NC}"
+        echo -e "${YELLOW}💡 Run ./setup_env.sh to configure Docker fallback${NC}"
+        exit 1
+    fi
+fi
+
+# Generate log file name
+LOG_COUNTER=1
+while [[ -f "$LOG_DIR/clms_log_$(printf "%04d" $LOG_COUNTER).log" ]]; do
+    ((LOG_COUNTER++))
+    if [[ $LOG_COUNTER -gt 9999 ]]; then
+        echo -e "${RED}❌ Maximum log files reached (9999), cleaning up old logs...${NC}"
+        rm -f "$LOG_DIR/clms_log_0001.log"
+        # Shift all log files down by one
+        for i in {2..9999}; do
+            old_file="$LOG_DIR/clms_log_$(printf "%04d" $i).log"
+            new_file="$LOG_DIR/clms_log_$(printf "%04d" $((i-1))).log"
+            if [[ -f "$old_file" ]]; then
+                mv "$old_file" "$new_file"
+            fi
+        done
+        LOG_COUNTER=9999
+        break
+    fi
+done
+LOG_FILE="$LOG_DIR/clms_log_$(printf "%04d" $LOG_COUNTER).log"
+
+# Check if JAR exists, build if not
+JAR_FILE="target/cli-llm-management-system-1.0.0-SNAPSHOT.jar"
+if [[ ! -f "$JAR_FILE" ]]; then
+    echo -e "${YELLOW}🔨 JAR file not found, building application...${NC}"
+    if ! $MVN_CMD clean package -DskipTests -q; then
+        echo -e "${RED}❌ Build failed${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}✅ Build completed${NC}"
+else
+    # Check if source is newer than JAR
+    if [[ $(find src -name "*.java" -newer "$JAR_FILE" | wc -l) -gt 0 ]]; then
+        echo -e "${YELLOW}🔨 Source files newer than JAR, rebuilding...${NC}"
+        if ! $MVN_CMD clean package -DskipTests -q; then
+            echo -e "${RED}❌ Build failed${NC}"
+            exit 1
+        fi
+        echo -e "${GREEN}✅ Rebuild completed${NC}"
+    fi
+fi
+
+# Display environment info
+echo ""
+echo -e "${BLUE}📋 Environment Configuration:${NC}"
+echo "   Database: ${PSQL_CLI_MANAGER_DB_NAME:-clms}@localhost:${PSQL_CLI_MANAGER_PORT:-9998}"
+echo "   User: ${PSQL_CLI_MANAGER_ADMIN_UN:-clms_admin}"
+echo "   Application Port: $APP_PORT"
+echo "   Build Mode: $BUILD_MODE"
+if [[ "$BUILD_MODE" == "docker" ]]; then
+    echo "   Java: 21 (Docker)"
+    echo "   Maven: 3.9.11 (Docker)"
+else
+    echo "   Java: $JAVA_VERSION"
+    echo "   JAVA_HOME: ${JAVA_HOME:-not set}"
+    echo "   MAVEN_HOME: ${MAVEN_HOME:-not set}"
+fi
+echo "   Log File: $LOG_FILE"
+echo ""
+echo -e "${BLUE}📋 Monitor Commands:${NC}"
+echo "   Tail logs: tail -f $LOG_FILE"
+echo "   Stop app: ./run_clms -stop"
+echo ""
+
+# Start the application in background
+echo -e "${GREEN}🎯 Starting CLI LLM Management System in background...${NC}"
+echo "   Health endpoint: http://localhost:$APP_PORT/documents/health"
+echo "   OpenAPI Docs: http://localhost:$APP_PORT/docs"
+echo "   Log file: $LOG_FILE"
+echo ""
+
+# Start application in background and capture PID
+if [[ "$BUILD_MODE" == "docker" ]]; then
+    # For Docker mode, run Java in detached container
+    docker compose -f "$SCRIPT_DIR/docker/tools/docker-compose.build.yml" run -d --rm \
+        --name clms_runtime \
+        build-env java -jar "/workspace/$JAR_FILE" > "$LOG_FILE" 2>&1
+    # Get the container's PID (actually container ID)
+    APP_PID=$(docker ps -q -f name=clms_runtime)
+else
+    # For local mode, run Java directly
+    $JAVA_CMD -jar "$JAR_FILE" > "$LOG_FILE" 2>&1 &
+    APP_PID=$!
+fi
+echo $APP_PID > "$PID_FILE"
+
+# Wait a moment and check if the process is still running
+sleep 2
+if [[ "$BUILD_MODE" == "docker" ]]; then
+    # Check if Docker container is running
+    if docker ps -q -f name=clms_runtime | grep -q .; then
+        echo -e "${GREEN}✅ Application started successfully (Container: clms_runtime)${NC}"
+        echo ""
+        echo -e "${BLUE}📊 Live Monitoring Commands:${NC}"
+        echo "   tail -f $LOG_FILE"
+        echo ""
+        echo -e "${BLUE}🌐 Application Endpoints:${NC}"
+        echo "   http://localhost:$APP_PORT/documents/health"
+        echo "   http://localhost:$APP_PORT/docs"
+        echo ""
+        echo -e "${BLUE}🛑 Stop Command:${NC}"
+        echo "   ./run_clms -stop"
+    else
+        echo -e "${RED}❌ Application failed to start. Check log file: $LOG_FILE${NC}"
+        rm -f "$PID_FILE"
+        exit 1
+    fi
+else
+    # Check if local process is running
+    if kill -0 "$APP_PID" 2>/dev/null; then
+        echo -e "${GREEN}✅ Application started successfully (PID: $APP_PID)${NC}"
+        echo ""
+        echo -e "${BLUE}📊 Live Monitoring Commands:${NC}"
+        echo "   tail -f $LOG_FILE"
+        echo ""
+        echo -e "${BLUE}🌐 Application Endpoints:${NC}"
+        echo "   http://localhost:$APP_PORT/documents/health"
+        echo "   http://localhost:$APP_PORT/docs"
+        echo ""
+        echo -e "${BLUE}🛑 Stop Command:${NC}"
+        echo "   ./run_clms -stop"
+    else
+        echo -e "${RED}❌ Application failed to start. Check log file: $LOG_FILE${NC}"
+        rm -f "$PID_FILE"
+        exit 1
+    fi
+fi
