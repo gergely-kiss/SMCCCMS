@@ -59,6 +59,17 @@ management:
     health:
       show-details: when-authorized
 
+# User Provider Configuration
+user:
+  provider:
+    base-url: ${USER_PROVIDER_BASE_URL:http://localhost:8081}
+    username: ${USER_PROVIDER_USERNAME:demo}
+    password: ${USER_PROVIDER_PASSWORD:demo}
+
+# Session Configuration  
+session:
+  secret: ${SESSION_SECRET:smcccms-demo-secret-key-change-in-production}
+
 logging:
   level:
     root: INFO
