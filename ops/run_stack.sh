@@ -32,6 +32,7 @@ cleanup() {
     # Kill background processes
     if [[ -n $DB_PID ]]; then
         print_info "Stopping database..."
+        cd "$SCRIPT_DIR"
         docker-compose -f docker-compose.db.yml down
     fi
     
@@ -72,6 +73,9 @@ DB_PID=1  # Docker runs as daemon
 # Wait for database to be ready
 print_info "Waiting for database to be ready..."
 sleep 5
+
+# Create logs directory
+mkdir -p "$PROJECT_ROOT/logs"
 
 # Start backend
 print_status "Starting Spring Boot backend..."
@@ -120,9 +124,6 @@ fi
 npm run dev > ../logs/frontend.log 2>&1 &
 FE_PID=$!
 print_info "Frontend started with PID: $FE_PID"
-
-# Create logs directory
-mkdir -p "$PROJECT_ROOT/logs"
 
 # Print status
 print_status "🚀 All services started successfully!"
