@@ -1,17 +1,256 @@
-@import 'govuk-frontend/govuk/all';
+/* Basic GOV.UK inspired styles for SMCCCMS */
+* {
+  box-sizing: border-box;
+}
 
-// Additional Brighton & Hove branding styles
+body {
+  font-family: "GDS Transport", arial, sans-serif;
+  font-size: 19px;
+  line-height: 1.25;
+  color: #0b0c0c;
+  background-color: #ffffff;
+  margin: 0;
+  padding: 0;
+}
+
+/* Layout */
+.govuk-width-container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 15px;
+}
+
+.govuk-main-wrapper {
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+
+.govuk-grid-row {
+  margin-left: -15px;
+  margin-right: -15px;
+}
+
+.govuk-grid-column-two-thirds {
+  width: 66.6666%;
+  float: left;
+  padding: 0 15px;
+}
+
+/* Typography */
+.govuk-heading-xl {
+  font-size: 48px;
+  line-height: 1.09375;
+  font-weight: 700;
+  margin-top: 0;
+  margin-bottom: 20px;
+}
+
+.govuk-heading-l {
+  font-size: 36px;
+  line-height: 1.11111;
+  font-weight: 700;
+  margin-top: 0;
+  margin-bottom: 20px;
+}
+
+.govuk-body {
+  margin-top: 0;
+  margin-bottom: 15px;
+}
+
+/* Forms */
+.govuk-form {
+  margin-bottom: 30px;
+}
+
+.govuk-form-group {
+  margin-bottom: 20px;
+}
+
+.govuk-label {
+  font-weight: 400;
+  display: block;
+  margin-bottom: 5px;
+}
+
+.govuk-label--m {
+  font-weight: 600;
+  font-size: 19px;
+}
+
+.govuk-hint {
+  font-size: 19px;
+  line-height: 1.25;
+  color: #505a5f;
+  margin-bottom: 15px;
+}
+
+.govuk-input {
+  font-size: 19px;
+  line-height: 1.25;
+  border: 2px solid #0b0c0c;
+  padding: 5px 4px 4px;
+  margin: 0;
+  outline: 0;
+}
+
+.govuk-input--width-10 {
+  width: 10ex;
+}
+
+.govuk-input:focus {
+  outline: 3px solid #fd0;
+  outline-offset: 0;
+  box-shadow: inset 0 0 0 2px;
+}
+
+/* Buttons */
+.govuk-button {
+  font-family: "GDS Transport", arial, sans-serif;
+  font-weight: 400;
+  font-size: 19px;
+  line-height: 1.25;
+  box-sizing: border-box;
+  display: inline-block;
+  position: relative;
+  width: 100%;
+  margin-top: 0;
+  margin-right: 0;
+  margin-left: 0;
+  margin-bottom: 22px;
+  padding: 8px 10px 7px;
+  border: 2px solid transparent;
+  border-radius: 0;
+  color: #fff;
+  background-color: #00703c;
+  box-shadow: 0 2px 0 #002d18;
+  text-align: center;
+  vertical-align: top;
+  cursor: pointer;
+  -webkit-appearance: none;
+  text-decoration: none;
+}
+
+.govuk-button:hover {
+  background-color: #005a30;
+}
+
+.govuk-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.govuk-button:focus {
+  outline: 3px solid #fd0;
+  outline-offset: 0;
+  box-shadow: inset 0 0 0 2px;
+}
+
+/* Links */
+.govuk-link {
+  color: #1d70b8;
+  text-decoration: underline;
+}
+
+.govuk-link:hover {
+  color: #003078;
+}
+
+.govuk-link:focus {
+  outline: 3px solid #fd0;
+  outline-offset: 0;
+  color: #0b0c0c;
+  background-color: #fd0;
+  box-shadow: 0 -2px #fd0, 0 4px #0b0c0c;
+  text-decoration: none;
+}
+
+/* Header */
 .bhcc-header {
   background-color: #003c71;
   color: white;
-  
-  .govuk-header__logotype-text {
-    color: white;
-  }
+  padding: 20px 0;
 }
 
+.bhcc-header h1 {
+  color: white;
+  margin: 0;
+  font-size: 24px;
+}
+
+/* Content */
 .bhcc-content {
   max-width: 960px;
   margin: 0 auto;
   padding: 40px 20px;
+}
+
+/* Phase banner */
+.govuk-phase-banner {
+  padding: 10px 0;
+  border-bottom: 1px solid #b1b4b6;
+}
+
+.govuk-phase-banner__content {
+  display: table;
+  width: 100%;
+}
+
+.govuk-phase-banner__text {
+  display: table-cell;
+  vertical-align: baseline;
+}
+
+.govuk-tag {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 5px 8px 4px;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  text-decoration: none;
+  color: #fff;
+  background-color: #1d70b8;
+}
+
+/* Navigation tabs */
+.govuk-tabs {
+  margin-bottom: 20px;
+}
+
+.govuk-tabs__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-bottom: 1px solid #b1b4b6;
+}
+
+.govuk-tabs__list-item {
+  display: inline-block;
+  margin-bottom: -1px;
+  margin-right: 5px;
+}
+
+.govuk-tabs__tab {
+  display: block;
+  padding: 10px 20px;
+  border: 1px solid transparent;
+  color: #1d70b8;
+  text-decoration: none;
+  background-color: #f3f2f1;
+}
+
+.govuk-tabs__tab[aria-selected="true"] {
+  color: #0b0c0c;
+  background-color: #fff;
+  border-color: #b1b4b6;
+  border-bottom-color: #fff;
+}
+
+/* Utilities */
+.clearfix::after {
+  content: "";
+  display: table;
+  clear: both;
 }
