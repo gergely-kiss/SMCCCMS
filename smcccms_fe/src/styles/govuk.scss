@@ -1,0 +1,17 @@
+@import 'govuk-frontend/govuk/all';
+
+// Additional Brighton & Hove branding styles
+.bhcc-header {
+  background-color: #003c71;
+  color: white;
+  
+  .govuk-header__logotype-text {
+    color: white;
+  }
+}
+
+.bhcc-content {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}

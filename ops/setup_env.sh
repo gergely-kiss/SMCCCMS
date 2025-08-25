@@ -7,7 +7,7 @@ if [ ! -f ops/env ]; then
   cat > ops/env <<'EOF'
 # Database
 DB_URL=jdbc:postgresql://localhost:57542/smcccms
-DB_USER=pg_admin
+DB_USER=smcccms_admin
 DB_PASS=SMCCCMSdemo
 
 # External user provider (adjust if different)
@@ -16,7 +16,7 @@ USER_PROVIDER_USERNAME=case-manager
 USER_PROVIDER_PASSWORD=1966ItsComingHomeThisYear
 
 # AI
-ANTHROPIC_API_KEY=replace_me
+ANTHROPIC_API_KEY="your_anthropic_api_key_here"
 
 # Server
 SERVER_PORT=18081
